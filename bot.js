@@ -2,9 +2,14 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+const ADMIN_ID = parseInt(process.env.ADMIN_USER_ID);
 
 // In-memory store: chatId -> { text: string, messageId: number }
 const stickyStore = new Map();
+
+function isAdmin(ctx) {
+  return ctx.from?.id === ADMIN_ID;
+}
 
 async function deleteOldSticky(chatId) {
   const sticky = stickyStore.get(chatId);
@@ -17,6 +22,8 @@ async function deleteOldSticky(chatId) {
 }
 
 bot.command("setsticky", async (ctx) => {
+  if (!isAdmin(ctx)) return; // ignore non-admin
+
   const text = ctx.message.text.replace(/^\/setsticky\s*/, "").trim();
 
   if (!text) {
@@ -26,7 +33,7 @@ bot.command("setsticky", async (ctx) => {
   const chatId = ctx.chat.id;
   await deleteOldSticky(chatId);
 
-  const sent = await ctx.reply(`📌 ${text}`);
+  const sent = await bot.telegram.sendMessage(chatId, `📌 ${text}`);
   stickyStore.set(chatId, { text, messageId: sent.message_id });
 
   try {
@@ -37,6 +44,8 @@ bot.command("setsticky", async (ctx) => {
 });
 
 bot.command("clearsticky", async (ctx) => {
+  if (!isAdmin(ctx)) return; // ignore non-admin
+
   const chatId = ctx.chat.id;
   await deleteOldSticky(chatId);
   stickyStore.delete(chatId);
@@ -54,7 +63,6 @@ bot.on("message", async (ctx) => {
 
   await deleteOldSticky(chatId);
 
-  // Use sendMessage (not reply) so it's a standalone message with no quote
   const sent = await bot.telegram.sendMessage(chatId, `📌 ${sticky.text}`);
   stickyStore.set(chatId, { text: sticky.text, messageId: sent.message_id });
 });
